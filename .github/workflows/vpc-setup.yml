@@ -12,14 +12,14 @@ on:
       vpc_cidr:
         description: "VPC CIDR block"
         required: true
-        default: "10.0.0.0/16"
         type: string
+        default: "10.0.0.0/16"
 
       enable_nat:
         description: "Enable NAT Gateway (true/false)"
         required: true
-        default: false
         type: boolean
+        default: false
 
 jobs:
   terraform:
