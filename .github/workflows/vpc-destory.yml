@@ -1,0 +1,61 @@
+name: VPC Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      vpc_name:
+        description: "Name of the VPC"
+        required: true
+        type: string
+        default: "karim-tf-vpc"
+
+      cidr_block:
+        description: "VPC CIDR block"
+        required: true
+        default: "10.0.0.0/16"
+        type: string
+
+      enable_nat:
+        description: "Enable NAT Gateway (true/false)"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  terraform:
+    name: Destroy VPC Infrastructure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: vpc-setup
+        run: |
+          terraform init
+          terraform destroy -auto-approve \
+            -var="vpc_name=${{ inputs.vpc_name }}" \
+            -var="vpc_cidr=${{ inputs.cidr_block }}" \
+            -var="enable_nat=${{ inputs.enable_nat }}" \
+            -var='public_subnets={"us-east-1a":"10.0.1.0/24"}' \
+            -var='private_subnets={}' \
+            -var='default_tags={"Environment":"destroy","Owner":"karim"}'
