@@ -1,3 +1,16 @@
+# New Vars for github workflow
+variable "server_name" {
+  description = "Single server name for this deployment"
+  type        = string
+}
+
+variable "ports" {
+  description = "Comma-separated custom ports (e.g., 8000,8080)"
+  type        = string
+}
+
+
+
 variable "region" {
   description = "AWS region to deploy into"
   type        = string
@@ -6,13 +19,13 @@ variable "region" {
 
 
 
-# Map of SGs to create per instance
-variable "sg_map" {
-  description = "Map of security groups to create. Key = instance name, value = object with ports list"
-  type = map(object({
-    ports = list(number)
-  }))
-}
+# # Map of SGs to create per instance
+# variable "sg_map" {
+#   description = "Map of security groups to create. Key = instance name, value = object with ports list"
+#   type = map(object({
+#     ports = list(number)
+#   }))
+# }
 
 
 variable "ec2_instances" {
@@ -37,5 +50,13 @@ variable "default_tags" {
   default = {
     Environment = "dev"
     Owner       = "karim"
+  }
+}
+
+locals {
+  sg_map = {
+    "${var.server_name}" = {
+      ports = [for p in split(",", var.ports) : tonumber(trimspace(p))]
+    }
   }
 }

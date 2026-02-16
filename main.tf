@@ -3,7 +3,8 @@ module "sg" {
   source       = "./modules/sg"
   vpc_id       = data.terraform_remote_state.vpc.outputs.vpc_id
   default_tags = var.default_tags
-  sg_map       = var.sg_map
+  # sg_map       = var.sg_map
+  sg_map       = local.sg_map
 }
 
 # EC2 module

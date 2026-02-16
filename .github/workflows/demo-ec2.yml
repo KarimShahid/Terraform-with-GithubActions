@@ -1,115 +1,134 @@
-name: Deploy EC2 & Security Groups
-
+name: Deploy EC2 + SG
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: Environment name
+      server_name:
+        description: "Server name"
         required: true
+        default: "serverA"
         type: string
-        default: dev
-
-      aws_region:
-        description: AWS Region
+      region:
+        description: "AWS Region" 
         required: true
+        default: "us-east-1"
         type: string
-        default: us-east-1
-
-      ec2_instances:
-        description: EC2 instances JSON
+      ports:
+        description: "Comma-separated ports (e.g., 8000,8080)"
         required: true
+        default: "8000,9000"
         type: string
-        default: |
-          {
-            "sonar": {
-              "instance_type": "t3.small",
-              "key_name": "awsKeyPair",
-              "volume_type": "gp3",
-              "volume_size": 20,
-              "tags": { "Environment": "dev" },
-              "subnet_key": "us-east-1a",
-              "subnet_type": "public",
-              "associate_eip": true
-            }
-          }
-
-      sg_map:
-        description: Security groups JSON
+      instance_type:
+        description: "Instance type"
         required: true
+        default: "t3.micro"
         type: string
-        default: |
-          {
-            "sonar": {
-              "ports": [9000, 6500]
-            }
-          }
+      key_name:
+        description: "Key pair name"
+        required: true
+        default: "awsKeyPair"
+        type: string
+      subnet_key:
+        description: "Subnet AZ key (us-east-1a)"
+        required: true
+        default: "us-east-1a"
+        type: string
+      subnet_type:
+        description: "public or private"
+        required: true
+        default: "public"
+        type: string
+      volume_size:
+        description: "Root volume size (GB)"
+        required: true
+        default: 20
+        type: number
+      associate_eip:
+        description: "Assign public IP?"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   terraform:
-    name: Deploy EC2 & SG
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.7
 
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: us-east-1
 
       - name: Terraform Init
-        working-directory: .
-        run: terraform init
-
-      - name: Terraform Format Check
-        working-directory: .
-        run: terraform fmt -check -recursive
+        run: |
+          terraform init \
+            -backend-config="bucket=sk-ghactions-backend-tf" \
+            -backend-config="region=${{ github.event.inputs.region }}" \
+            -backend-config="key=${{ github.event.inputs.server_name }}/terraform.tfstate"
 
       - name: Terraform Validate
-        working-directory: .
         run: terraform validate
 
-      - name: Terraform Apply
-        working-directory: .
+      - name: Setup Terraform Variables & Plan
         env:
-          TF_VAR_environment: ${{ inputs.environment }}
-          TF_VAR_aws_region: ${{ inputs.aws_region }}
-
-          # Pass the JSON inputs as string
-          TF_VAR_ec2_instances: ${{ inputs.ec2_instances }}
-          TF_VAR_sg_map: ${{ inputs.sg_map }}
-
-          TF_VAR_default_tags: >
-            {
-              "Environment": "${{ inputs.environment }}",
-              "ManagedBy": "terraform"
+          TF_VAR_server_name: ${{ github.event.inputs.server_name }}
+          TF_VAR_region: ${{ github.event.inputs.region }}
+          TF_VAR_ports: ${{ github.event.inputs.ports }}
+        run: |
+          # YOUR JSON HEREDOC METHOD - PERFECT!
+          cat <<EOF > tmp_ec2.json
+          {
+            "${TF_VAR_server_name}": {
+              "instance_type": "${{ github.event.inputs.instance_type }}",
+              "key_name": "${{ github.event.inputs.key_name }}",
+              "subnet_key": "${{ github.event.inputs.subnet_key }}",
+              "subnet_type": "${{ github.event.inputs.subnet_type }}",
+              "volume_type": "gp3",
+              "volume_size": ${{ github.event.inputs.volume_size }},
+              "tags": { "Environment" : "dev" },
+              "associate_eip": ${{ github.event.inputs.associate_eip }}
             }
-        run: |
-          echo "Deploying EC2 and Security Groups for environment: $TF_VAR_environment"
-          terraform apply -auto-approve
+          }
+          EOF
 
-      - name: Get EC2 Public IPs
-        id: get_eip
-        working-directory: .
-        run: |
-          EC2_IPS=$(terraform output -json eip)
-          echo "EC2_IPS=$EC2_IPS"
-          echo "ec2_ips=$EC2_IPS" >> $GITHUB_OUTPUT
+          # Export for Terraform
+          export TF_VAR_ec2_instances="$(cat tmp_ec2.json)"
+          
+          # Debug (remove later)
+          echo "SG_MAP: ${TF_VAR_ports}"
+          echo "EC2_INSTANCES: $(cat tmp_ec2.json)"
+          
+          terraform plan
 
-      - name: Update GitHub Variable
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          echo "Updating EC2 IPs in GitHub variable"
-          gh variable set EC2_IPS --body "${{ steps.get_eip.outputs.ec2_ips }}"
+      # - name: Terraform Apply
+      #   env:
+      #     TF_VAR_server_name: ${{ github.event.inputs.server_name }}
+      #     TF_VAR_region: ${{ github.event.inputs.region }}
+      #     TF_VAR_ports: ${{ github.event.inputs.ports }}
+      #   run: |
+      #     # Re-create JSON for apply
+      #     cat <<EOF > tmp_ec2.json
+      #     {
+      #       "${TF_VAR_server_name}": {
+      #         "instance_type": "${{ github.event.inputs.instance_type }}",
+      #         "key_name": "${{ github.event.inputs.key_name }}",
+      #         "subnet_key": "${{ github.event.inputs.subnet_key }}",
+      #         "subnet_type": "${{ github.event.inputs.subnet_type }}",
+      #         "volume_type": "gp3",
+      #         "volume_size": ${{ github.event.inputs.volume_size }},
+      #         "tags": { "Environment" : "dev" },
+      #         "associate_eip": ${{ github.event.inputs.associate_eip }}
+      #       }
+      #     }
+      #     EOF
+      #     export TF_VAR_ec2_instances="$(cat tmp_ec2.json)"
+      #     terraform apply -auto-approve
