@@ -32,7 +32,7 @@ variable "ec2_instances" {
   description = "Map of EC2 instances to create dynamically. Key is instance name"
   type = map(object({
     instance_type = string
-    subnet_id     = string
+    subnet_id     = optional(string)
     key_name      = string
     volume_type   = string
     volume_size   = number
