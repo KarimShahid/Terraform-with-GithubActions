@@ -35,8 +35,5 @@ jobs:
             -backend-config="region=us-east-1" \
             -backend-config="key=${{ github.event.inputs.server_name }}/terraform.tfstate"
 
-      - name: Terraform Destroy Plan
-        run: terraform plan -destroy
-
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
