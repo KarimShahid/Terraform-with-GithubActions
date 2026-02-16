@@ -4,6 +4,7 @@ module "sg" {
   vpc_id       = data.terraform_remote_state.vpc.outputs.vpc_id
   default_tags = var.default_tags
   # sg_map       = var.sg_map
+  # Done for parsing comma-separated ports in main.tf
   sg_map       = local.sg_map
 }
 

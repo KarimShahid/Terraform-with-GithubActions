@@ -53,6 +53,7 @@ variable "default_tags" {
   }
 }
 
+# This local block is used to transform the comma-separated ports into a list of numbers for the SG module
 locals {
   sg_map = {
     "${var.server_name}" = {
