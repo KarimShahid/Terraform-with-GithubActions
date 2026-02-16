@@ -1,4 +1,4 @@
-name: Backend Setup (S3)
+name: Backend Create (S3)
 
 on: 
   workflow_dispatch:

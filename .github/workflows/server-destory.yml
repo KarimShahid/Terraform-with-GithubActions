@@ -1,4 +1,4 @@
-name: Destroy EC2 + SG
+name: EC2 + SG Destroy 
 on:
   workflow_dispatch:
     inputs:
