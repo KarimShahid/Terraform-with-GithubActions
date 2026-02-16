@@ -8,6 +8,48 @@ on:
         default: "serverA"
         type: string
 
+      ports:
+        description: "Comma-separated ports used during CREATE"
+        required: true
+        default: "8000,9000"
+        type: string
+
+      instance_type:
+        description: "Instance type used during CREATE"
+        required: true
+        default: "t3.micro"
+        type: string
+
+      key_name:
+        description: "Key pair used during CREATE"
+        required: true
+        default: "awsKeyPair"
+        type: string
+
+      subnet_key:
+        description: "AZ key used during CREATE (us-east-1a)"
+        required: true
+        default: "us-east-1a"
+        type: string
+
+      subnet_type:
+        description: "public/private used during CREATE"
+        required: true
+        default: "public"
+        type: string
+
+      volume_size:
+        description: "Volume size used during CREATE (GB)"
+        required: true
+        default: 20
+        type: number
+        
+      associate_eip:
+        description: "EIP used during CREATE?"
+        required: true
+        default: true
+        type: boolean
+
 jobs:
   terraform-destroy:
     runs-on: ubuntu-latest
@@ -36,4 +78,23 @@ jobs:
             -backend-config="key=${{ github.event.inputs.server_name }}/terraform.tfstate"
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve
+        env:
+          TF_VAR_server_name: ${{ github.event.inputs.server_name }}
+          TF_VAR_ports: ${{ github.event.inputs.ports }}
+        run: |
+          cat <<EOF > tmp_ec2.json
+          {
+            "${TF_VAR_server_name}": {
+              "instance_type": "${{ github.event.inputs.instance_type }}",
+              "key_name": "${{ github.event.inputs.key_name }}",
+              "subnet_key": "${{ github.event.inputs.subnet_key }}",
+              "subnet_type": "${{ github.event.inputs.subnet_type }}",
+              "volume_type": "gp3",
+              "volume_size": ${{ github.event.inputs.volume_size }},
+              "tags": { "Environment": "dev" },
+              "associate_eip": ${{ github.event.inputs.associate_eip }}
+            }
+          }
+          EOF
+          export TF_VAR_ec2_instances="$(cat tmp_ec2.json)"
+          terraform destroy -auto-approve

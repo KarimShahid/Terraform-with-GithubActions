@@ -1,68 +1,43 @@
-name: Destroy EC2 + SG
+name: VPC Destroy
+
 on:
   workflow_dispatch:
     inputs:
-      server_name:
-        description: "Server to destroy"
+      vpc_name:
+        description: "Name of the VPC"
         required: true
-        default: "serverA"
         type: string
-      
-      ports:
-        description: "Comma-separated ports used during CREATE"
+        default: "karim-tf-vpc"
+
+      cidr_block:
+        description: "VPC CIDR block"
         required: true
-        default: "8000,9000"
         type: string
+        default: "10.0.0.0/16"
 
-      instance_type:
-        description: "Instance type used during CREATE"
+      enable_nat:
+        description: "Enable NAT Gateway (true/false)"
         required: true
-        default: "t3.micro"
-        type: string
-
-      key_name:
-        description: "Key pair used during CREATE"
-        required: true
-        default: "awsKeyPair"
-        type: string
-
-      subnet_key:
-        description: "AZ key used during CREATE (us-east-1a)"
-        required: true
-        default: "us-east-1a"
-
-        type: string
-      subnet_type:
-        description: "public/private used during CREATE"
-        required: true
-        default: "public"
-        type: string
-
-      volume_size:
-        description: "Volume size used during CREATE (GB)"
-        required: true
-        default: 20
-        type: number
-
-      associate_eip:
-        description: "EIP used during CREATE?"
-        required: true
-        default: true
         type: boolean
+        default: false
 
 jobs:
-  terraform-destroy:
+  terraform:
+    name: Destroy VPC Infrastructure
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.7
-
-      - name: Configure AWS Credentials
+      
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -70,31 +45,14 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
-      - name: Terraform Init
-        run: |
-          terraform init \
-            -backend-config="bucket=sk-ghactions-backend-tf" \
-            -backend-config="region=us-east-1" \
-            -backend-config="key=${{ github.event.inputs.server_name }}/terraform.tfstate"
-
       - name: Terraform Destroy
-        env:
-          TF_VAR_server_name: ${{ github.event.inputs.server_name }}
-          TF_VAR_ports: ${{ github.event.inputs.ports }}
+        working-directory: vpc-setup
         run: |
-          cat <<EOF > tmp_ec2.json
-          {
-            "${TF_VAR_server_name}": {
-              "instance_type": "${{ github.event.inputs.instance_type }}",
-              "key_name": "${{ github.event.inputs.key_name }}",
-              "subnet_key": "${{ github.event.inputs.subnet_key }}",
-              "subnet_type": "${{ github.event.inputs.subnet_type }}",
-              "volume_type": "gp3",
-              "volume_size": ${{ github.event.inputs.volume_size }},
-              "tags": { "Environment": "dev" },
-              "associate_eip": ${{ github.event.inputs.associate_eip }}
-            }
-          }
-          EOF
-          export TF_VAR_ec2_instances="$(cat tmp_ec2.json)"
-          terraform destroy -auto-approve
+          terraform init
+          terraform destroy -auto-approve \
+            -var="vpc_name=${{ inputs.vpc_name }}" \
+            -var="vpc_cidr=${{ inputs.cidr_block }}" \
+            -var="enable_nat=${{ inputs.enable_nat }}" \
+            -var='public_subnets={"us-east-1a":"10.0.1.0/24"}' \
+            -var='private_subnets={}' \
+            -var='default_tags={"Environment":"destroy","Owner":"karim"}'
